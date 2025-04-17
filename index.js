@@ -16,7 +16,7 @@ const client = new Client({
 
 const config = {
   ...require('./config.json'),
-  allowedRoles: process.env.ALLOWED_ROLES.split(','),
+  allowedRoles: config.allowedRoles || [], // Fallback to empty array if missing
   logChannelId: process.env.LOG_CHANNEL
 };
 
