@@ -1,12 +1,6 @@
 {
-  "prizes": [
-    "EXAMPLE_PRIZE_CODE_1",
-    "EXAMPLE_PRIZE_CODE_2"
-  ],
+  "prizes": [],
   "embedColor": "#FF0CF5",
-  "allowedRoles": [
-    "role_id1",
-    "role_id2"
-  ],
-  "logChannelId": "1362213768989376705"
+  "allowedRoles": [],
+  "logChannelId": "channel_id"
 }
