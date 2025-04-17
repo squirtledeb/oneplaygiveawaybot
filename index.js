@@ -4,6 +4,9 @@ const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v9');
 const fs = require('fs');
 
+// Load config first
+const config = require('./config.json');
+
 const client = new Client({
   intents: [
     IntentsBitField.Flags.Guilds,
@@ -14,11 +17,11 @@ const client = new Client({
   ]
 });
 
-const config = {
-  ...require('./config.json'),
-  allowedRoles: config.allowedRoles || [], // Fallback to empty array if missing
-  logChannelId: process.env.LOG_CHANNEL
-};
+// Initialize config properties if they don't exist
+if (!config.allowedRoles) config.allowedRoles = [];
+if (!config.prizes) config.prizes = [];
+if (!config.embedColor) config.embedColor = "#FFD700";
+config.logChannelId = process.env.LOG_CHANNEL || config.logChannelId;
 
 const activeGiveaways = new Map();
 
@@ -149,6 +152,8 @@ function logAction(message) {
 
 client.on('ready', () => {
   console.log(`🚀 ${client.user.tag} is online!`);
+  // Save config in case we added default values
+  fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
 });
 
 client.on('messageReactionAdd', async (reaction, user) => {
