@@ -15,7 +15,6 @@ const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v9');
 const fs = require('fs');
 
-// Load config first
 const config = require('./config.json');
 
 const client = new Client({
@@ -28,7 +27,6 @@ const client = new Client({
   ]
 });
 
-// Initialize config properties if they don't exist
 if (!config.allowedRoles) config.allowedRoles = [];
 if (!config.prizes) config.prizes = [];
 if (!config.embedColor) config.embedColor = "#FFD700";
@@ -135,6 +133,18 @@ const commands = [
         required: true
       }
     ]
+  },
+  {
+    name: 'end',
+    description: 'End a giveaway early',
+    options: [
+      {
+        name: 'messageid',
+        description: 'Message ID of the giveaway to end',
+        type: 3,
+        required: true
+      }
+    ]
   }
 ];
 
@@ -163,7 +173,6 @@ function logAction(message) {
 
 client.on('ready', () => {
   console.log(`🚀 ${client.user.tag} is online!`);
-  // Save config in case we added default values
   fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
 });
 
@@ -172,16 +181,15 @@ client.on('messageReactionAdd', async (reaction, user) => {
   if (reaction.emoji.name !== '🎉') return;
 
   const messageId = reaction.message.id;
-  
   if (activeGiveaways.has(messageId)) return;
 
   try {
     const message = await reaction.message.fetch();
     const embed = message.embeds[0];
     
-    if (embed?.title && embed.description?.includes('Giveaway ends')) {
+    if (embed?.title) {
       const dm = await user.createDM();
-      await dm.send('This giveaway has already ended. Stay tuned for more opportunities!');
+      await dm.send('🎰 Giveaway has ended!\nStay tuned for more opportunities!');
     }
   } catch (error) {
     console.error('Error handling old giveaway reaction:', error);
@@ -203,6 +211,13 @@ client.on('interactionCreate', async interaction => {
 
   switch (commandName) {
     case 'hostgiveaway':
+      if (config.prizes.length === 0) {
+        return interaction.reply({ 
+          content: '❌ No prizes available! Add prizes using /setprize first!',
+          ephemeral: true
+        });
+      }
+
       const title = options.getString('title');
       const duration = options.getInteger('duration');
       const channel = interaction.channel;
@@ -228,16 +243,19 @@ client.on('interactionCreate', async interaction => {
           claimedUsers: new Set(),
           endTime,
           title,
-          channelId: channel.id
+          channelId: channel.id,
+          collector: null
         };
-
-        activeGiveaways.set(message.id, giveawayData);
-        logAction(`📢 Giveaway Started: ${title} | Duration: ${duration} mins | Initial Prizes: ${initialPrizeCount}`);
 
         const collector = message.createReactionCollector({
           filter: (reaction, user) => !user.bot && reaction.emoji.name === '🎉',
           time: duration * 60000
         });
+
+        giveawayData.collector = collector;
+        activeGiveaways.set(message.id, giveawayData);
+
+        logAction(`📢 Giveaway Started: ${title} | Duration: ${duration} mins | Initial Prizes: ${initialPrizeCount}`);
 
         collector.on('collect', async (reaction, user) => {
           const giveaway = activeGiveaways.get(message.id);
@@ -253,10 +271,18 @@ client.on('interactionCreate', async interaction => {
             if (config.prizes.length === 0) {
               const dm = await user.createDM();
               await dm.send('🎰 All prizes have been claimed!\nStay tuned for more opportunities!');
+              const updatedEmbed = new EmbedBuilder()
+                .setColor(config.embedColor)
+                .setTitle(giveaway.title)
+                .setDescription('🎰 All prizes have been claimed!\nGiveaway closed!');
+              
+              await message.edit({ embeds: [updatedEmbed] });
+              collector.stop();
               return;
             }
 
-            const prize = config.prizes.shift();
+            const randomIndex = Math.floor(Math.random() * config.prizes.length);
+            const prize = config.prizes.splice(randomIndex, 1)[0];
             fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
             giveaway.claimedUsers.add(user.id);
             activeGiveaways.set(message.id, giveaway);
@@ -264,9 +290,8 @@ client.on('interactionCreate', async interaction => {
             const dm = await user.createDM();
             await dm.send(
               `🎉 CONGRATULATIONS!\n\n` +
-              `Your discount code: **${prize}**\n\n` +
-              `Redeem at: https://www.oneplay.in/subscription.html\n` +
-              `Contact support if you need help!`
+              `You just won: **${prize}**\n\n` +
+              `Open a https://discord.com/channels/953638945101578291/1076098403706093639 to claim your prize!`
             );
             
             logAction(`🎉 Prize Claimed: ${user.tag} won ${prize} | Remaining: ${config.prizes.length}`);
@@ -279,11 +304,6 @@ client.on('interactionCreate', async interaction => {
                 `React with 🎉 to participate!`
               );
 
-            if (config.prizes.length === 0) {
-              updatedEmbed.setDescription('🎰 All prizes have been claimed!\nGiveaway closed!');
-              collector.stop();
-            }
-
             await message.edit({ embeds: [updatedEmbed] });
 
           } catch (error) {
@@ -292,22 +312,30 @@ client.on('interactionCreate', async interaction => {
           }
         });
 
-        collector.on('end', async () => {
+        collector.on('end', async (collected, reason) => {
           activeGiveaways.delete(message.id);
+          const description = reason === 'manual' 
+            ? '🎉 Giveaway was ended manually!' 
+            : '🎉 Giveaway has ended!';
+          
           const endedEmbed = new EmbedBuilder()
             .setTitle(giveawayData.title)
             .setColor('#808080')
-            .setDescription('🎉 Giveaway has ended!');
+            .setDescription(description);
+          
           await message.edit({ embeds: [endedEmbed] }).catch(console.error);
+          logAction(`🔚 Giveaway "${giveawayData.title}" ended${reason === 'manual' ? ' manually' : ''}`);
         });
 
         await interaction.reply({ content: `Giveaway started in ${channel}!` })
-          .then(msg => setTimeout(() => msg.delete(), 3000));
+          .then(msg => setTimeout(() => msg.delete(), 3000))
+          .catch(console.error);
 
       } catch (error) {
         console.error('Giveaway error:', error);
         interaction.reply({ content: '❌ Failed to start giveaway!' })
-          .then(msg => setTimeout(() => msg.delete(), 3000));
+          .then(msg => setTimeout(() => msg.delete(), 3000))
+          .catch(console.error);
       }
       break;
 
@@ -322,13 +350,15 @@ client.on('interactionCreate', async interaction => {
       
       logAction(`🎁 Added ${quantity}x ${prizeText}`);
       interaction.reply({ content: `Added ${quantity} of ${prizeText} prize(s)!` })
-        .then(msg => setTimeout(() => msg.delete(), 3000));
+        .then(msg => setTimeout(() => msg.delete(), 3000))
+        .catch(console.error);
       break;
 
     case 'viewprizes':
       if (config.prizes.length === 0) {
         return interaction.reply({ content: 'No prizes configured!' })
-          .then(msg => setTimeout(() => msg.delete(), 3000));
+          .then(msg => setTimeout(() => msg.delete(), 3000))
+          .catch(console.error);
       }
       interaction.reply({
         content: `**Current Prizes:**\n${config.prizes.map((p, i) => `${i+1}. ${p}`).join('\n')}`,
@@ -340,14 +370,16 @@ client.on('interactionCreate', async interaction => {
       const index = options.getInteger('index') - 1;
       if (index < 0 || index >= config.prizes.length) {
         return interaction.reply({ content: 'Invalid prize number!' })
-          .then(msg => setTimeout(() => msg.delete(), 3000));
+          .then(msg => setTimeout(() => msg.delete(), 3000))
+          .catch(console.error);
       }
       const removedPrize = config.prizes.splice(index, 1)[0];
       fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
       
       logAction(`🗑 Removed prize: ${removedPrize}`);
       interaction.reply({ content: `Removed prize: ${removedPrize}` })
-        .then(msg => setTimeout(() => msg.delete(), 3000));
+        .then(msg => setTimeout(() => msg.delete(), 3000))
+        .catch(console.error);
       break;
 
     case 'clearprizes':
@@ -356,7 +388,8 @@ client.on('interactionCreate', async interaction => {
       
       logAction('🧹 Cleared all prizes');
       interaction.reply({ content: 'All prizes cleared!' })
-        .then(msg => setTimeout(() => msg.delete(), 3000));
+        .then(msg => setTimeout(() => msg.delete(), 3000))
+        .catch(console.error);
       break;
 
     case 'addrole':
@@ -367,7 +400,8 @@ client.on('interactionCreate', async interaction => {
       }
       logAction(`🛡 Added manager role: ${roleToAdd.name}`);
       interaction.reply({ content: `Added ${roleToAdd.toString()} as manager!` })
-        .then(msg => setTimeout(() => msg.delete(), 3000));
+        .then(msg => setTimeout(() => msg.delete(), 3000))
+        .catch(console.error);
       break;
 
     case 'removerole':
@@ -377,7 +411,8 @@ client.on('interactionCreate', async interaction => {
       
       logAction(`➖ Removed manager role: ${roleToRemove.name}`);
       interaction.reply({ content: `Removed ${roleToRemove.toString()} from managers!` })
-        .then(msg => setTimeout(() => msg.delete(), 3000));
+        .then(msg => setTimeout(() => msg.delete(), 3000))
+        .catch(console.error);
       break;
 
     case 'viewroles':
@@ -395,7 +430,28 @@ client.on('interactionCreate', async interaction => {
       
       logAction(`📜 Log channel set to ${logChannel.toString()}`);
       interaction.reply({ content: `Log channel set to ${logChannel.toString()}!` })
-        .then(msg => setTimeout(() => msg.delete(), 3000));
+        .then(msg => setTimeout(() => msg.delete(), 3000))
+        .catch(console.error);
+      break;
+
+    case 'end':
+      const messageId = options.getString('messageid');
+      const giveaway = activeGiveaways.get(messageId);
+
+      if (!giveaway) {
+        return interaction.reply({ 
+          content: '❌ No active giveaway found with that message ID!',
+          ephemeral: true
+        });
+      }
+
+      giveaway.collector.stop('manual');
+      logAction(`🛑 Giveaway "${giveaway.title}" (ID: ${messageId}) ended manually by ${interaction.user.tag}`);
+      
+      interaction.reply({ 
+        content: '✅ Giveaway ended successfully!',
+        ephemeral: true
+      });
       break;
   }
 });
