@@ -1,6 +1,15 @@
 {
+<<<<<<< HEAD
   "allowedRoles": [],
   "prizes": [],
   "embedColor": "#FFD700",
   "logChannelId": []
+=======
+  "prizes": [
+    "topup"
+  ],
+  "embedColor": "#FF0CF5",
+  "allowedRoles": [],
+  "logChannelId": "1362213768989376705"
+>>>>>>> fc34d9b8b979f7e00b495f926e0a3912e3b65d7d
 }
