@@ -1,10 +1,6 @@
 {
-  "prizes": [
-    "topup"
-  ],
-  "embedColor": "#FF0CF5",
-  "allowedRoles": [
-    "1362435964735197477"
-  ],
-  "logChannelId": "1362213768989376705"
+  "allowedRoles": [],
+  "prizes": [],
+  "embedColor": "#FFD700",
+  "logChannelId": []
 }

@@ -308,7 +308,7 @@ client.on('interactionCreate', async interaction => {
 
           } catch (error) {
             console.error('Reaction error:', error);
-            logAction(`❌ Error handling reaction from ${user.id}`);
+            logAction(`❌ Failed to send a dm to ${user.id}`);
           }
         });
 
