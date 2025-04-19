@@ -158,22 +158,52 @@ function logAction(message) {
   }
 }
 
-(async () => {
+// Register commands when bot joins a new guild
+client.on('guildCreate', async (guild) => {
   try {
-    console.log('🔧 Registering commands...');
+    console.log(`🔧 Registering commands for new guild: ${guild.name} (${guild.id})`);
     await rest.put(
-      Routes.applicationCommands(process.env.CLIENT_ID),
+      Routes.applicationGuildCommands(process.env.CLIENT_ID, guild.id),
       { body: commands }
     );
-    console.log('✅ Commands registered!');
+    console.log(`✅ Commands registered for ${guild.name}!`);
+    logAction(`Joined new guild: ${guild.name} (${guild.id}) - Commands registered`);
   } catch (error) {
-    console.error('❌ Command registration failed:', error);
+    console.error(`❌ Failed to register commands for ${guild.name}:`, error);
   }
-})();
+});
 
-client.on('ready', () => {
+// Remove commands when bot leaves a guild
+client.on('guildDelete', async (guild) => {
+  try {
+    console.log(`🧹 Removing commands from guild: ${guild.name} (${guild.id})`);
+    await rest.put(
+      Routes.applicationGuildCommands(process.env.CLIENT_ID, guild.id),
+      { body: [] }
+    );
+    console.log(`✅ Commands removed from ${guild.name}!`);
+  } catch (error) {
+    console.error(`❌ Failed to remove commands from ${guild.name}:`, error);
+  }
+});
+
+client.on('ready', async () => {
   console.log(`🚀 ${client.user.tag} is online!`);
   fs.writeFileSync('./config.json', JSON.stringify(config, null, 2));
+  
+  // Register commands for all existing guilds
+  for (const [guildId, guild] of client.guilds.cache) {
+    try {
+      console.log(`🔧 Registering commands for ${guild.name} (${guildId})`);
+      await rest.put(
+        Routes.applicationGuildCommands(process.env.CLIENT_ID, guildId),
+        { body: commands }
+      );
+      console.log(`✅ Commands registered for ${guild.name}!`);
+    } catch (error) {
+      console.error(`❌ Failed to register commands for ${guild.name}:`, error);
+    }
+  }
 });
 
 client.on('messageReactionAdd', async (reaction, user) => {
@@ -308,7 +338,7 @@ client.on('interactionCreate', async interaction => {
 
           } catch (error) {
             console.error('Reaction error:', error);
-            logAction(`❌ Failed to send a dm to ${user.id}`);
+            logAction(`❌ Failed to send dm to ${user.id}`);
           }
         });
 
